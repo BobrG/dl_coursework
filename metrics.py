@@ -15,13 +15,13 @@ class Loss():
     
     
 class Soft_dice_loss(Loss):
-    def __init__(self, smooth=1e-10, weights=1.0):
+    def __init__(self, smooth=1e-10):#, weights=1.0):
         super(Soft_dice_loss, self).__init__('soft_dice_loss', ['smooth', 'weights'])
         self.smooth = smooth
-        self.weights = weights
+        #self.weights = weights
         self.curr_val = 0.0
         
-    def evaluate(self, outputs, targets):
+    def evaluate(self, outputs, targets, weights):
         num_cl = targets.shape[1]
         batch_size = targets.size(0)
         w = targets.size(2)
@@ -36,7 +36,7 @@ class Soft_dice_loss(Loss):
             tflat = targ.view(-1)
             intersection = (iflat * tflat).sum()
             value += (1 - ((2. * intersection + self.smooth) /
-                  (iflat.sum() + tflat.sum() + self.smooth)))*self.weights[i]
+                  (iflat.sum() + tflat.sum() + self.smooth)))*weights[i]
         value = value / num_cl
         self.curr_val = value
         return value
