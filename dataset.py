@@ -59,11 +59,19 @@ class SURREALDataset(Dataset):
         self.transforms = transforms
         self.classes = num_classes
         self.identifier = identifier 
+        self.curr_pic = []
+        self.curr_mask = []
     def __getitem__(self, i):
            
         # get image and add padding to shape (x_height // 32 == 0, x_width // 32 == 0)
         x, pad = load_image(self.pics[i], pad=True)
-    
+        # save current batch of pictures for further demonstration
+        if len(self.curr_pic) >= 4:
+            self.curr_pic = []
+            self.curr_mask = []
+           
+        self.curr_pic.append(self.pics[i])
+        
         # get segmentation map
         tmp = self.pics[i].split('frame')
         mask = sio.loadmat(tmp[0] + '_segm.mat')['segm_' + str(int(tmp[1][0:-4]) + 1)] 
@@ -73,24 +81,20 @@ class SURREALDataset(Dataset):
         #restructing classes if necessary
         if self.identifier == 'restructed':
             mask[(mask == 2) + (mask == 3)] = 1
-            mask[(mask == 4) +
-                 (mask == 7) +
-                 (mask == 10) +
-                 (mask == 13) +
-                 (mask == 14) +
-                 (mask == 15)] = 2
+            mask[(mask == 4) + (mask == 7) +
+                 (mask == 10) + (mask == 13) +
+                 (mask == 14) + (mask == 15)] = 2
             mask[(mask == 5) + (mask == 6)] = 3
-            mask[(mask == 8) +
-                 (mask == 9) +
-                 (mask == 11) +
-                 (mask == 12)] = 4
+            mask[(mask == 8) + (mask == 9) +
+                 (mask == 11) + (mask == 12)] = 4
             mask[mask == 16] = 5
-            mask[(mask == 17) + (mask == 18)] = 6
-            mask[(mask == 19) + (mask == 20)] = 7
-            mask[(mask == 21) + 
-                 (mask == 22) +
-                 (mask == 23) +
-                 (mask == 24)] = 8            
+            mask[(mask == 19) + (mask == 20)] = 6
+            mask[(mask == 17) + (mask == 18)] = 7
+            mask[(mask == 21) + (mask == 22) +
+                 (mask == 23) + (mask == 24)] = 8            
+        
+        
+        self.curr_mask.append(mask)
         
         #binarizing mask
         for i in range(len(mask)):
@@ -116,8 +120,14 @@ class SURREALDataset(Dataset):
     
     def get_pics_path(self, indx):
         return self.pics[indx]
+    
     def get_classes(self):
         return self.classes
+    
+    def get_curr_pic(self):
+        return self.curr_pic
+    def get_curr_mask(self):
+        return self.curr_mask
     
 #SITTING PEOPLE DATASET LOADER    
 class SittingDataset(Dataset):
@@ -129,10 +139,19 @@ class SittingDataset(Dataset):
         self.classes = num_classes
         self.transforms = transforms
         self.identifier = identifier 
+        self.curr_pic = []
+        self.curr_mask = []
+    
     def __getitem__(self, i):
         # get image 
         x, pad = load_image(self.pics[i], pad=True)
-       
+        
+        if len(self.curr_pic) >= 4:
+            self.curr_pic = []
+            self.curr_mask = []
+           
+        self.curr_pic.append(self.pics[i])
+        
         # get segmentation map
         tmp = self.pics[i].split('img')
         mask = sio.loadmat(tmp[0] + 'masks' + tmp[-1][:-4] + '.mat')['M']   
@@ -140,14 +159,19 @@ class SittingDataset(Dataset):
         
         
         if self.identifier == 'restructed':
-            mask[(mask == 3) + (mask == 6)] = 3
-            mask[(mask == 4) + (mask == 7)] = 4
-            mask[(mask == 5) + (mask == 8)] = 5
-            mask[(mask == 9) + (mask == 12)] = 6  
-            mask[(mask == 10) + (mask == 13)] = 7
-            mask[(mask == 11) + (mask == 14)] = 8
             
-         #binarizing mask
+            mask[(mask == 5) + (mask == 8)] = 8
+            mask[(mask == 4) + (mask == 7)] = 7
+            mask[(mask == 3) + (mask == 6)] = 6
+            mask[(mask == 1)] = 5
+            mask[(mask == 2)] = 2
+            mask[(mask == 10) + (mask == 13)] = 1
+            mask[(mask == 9) + (mask == 12)] = 3  
+            mask[(mask == 11) + (mask == 14)] = 4
+            
+        self.curr_mask.append(mask)   
+         
+        #binarizing mask
         for i in range(len(mask)):
             row = mask[i]
             for j in range(len(row)):
@@ -171,3 +195,9 @@ class SittingDataset(Dataset):
 
     def get_classes(self):
         return self.classes
+    
+    def get_curr_pic(self):
+        return self.curr_pic
+    def get_curr_mask(self):
+        return self.curr_mask
+    
