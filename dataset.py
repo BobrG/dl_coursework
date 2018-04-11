@@ -96,15 +96,17 @@ class SURREALDataset(Dataset):
         
         self.curr_mask.append(mask)
         
+        # transorm ToTensor + add normalization to zero mean and unit std
+        if self.transforms is not None:
+            for t in self.transforms:
+                x, mask = t(x, mask)
+        
         #binarizing mask
         for i in range(len(mask)):
             row = mask[i]
             for j in range(len(row)):
                 y[row[j], i, j] = 1.0
-
-        # transorm ToTensor + add normalization to zero mean and unit std
-        if self.transforms is not None:
-            x = self.transforms(x)
+        
         for i in range(0, 3):
             x[i] -= x[i].mean()
             
@@ -168,7 +170,13 @@ class SittingDataset(Dataset):
             mask[(mask == 10) + (mask == 13)] = 1
             mask[(mask == 9) + (mask == 12)] = 3  
             mask[(mask == 11) + (mask == 14)] = 4
-            
+        
+
+         # transorm ToTensor + add normalization to zero mean and unit std
+        if self.transforms is not None:
+            for t in self.transforms:
+                x, mask = t(x, mask)
+
         self.curr_mask.append(mask)   
          
         #binarizing mask
@@ -177,9 +185,6 @@ class SittingDataset(Dataset):
             for j in range(len(row)):
                 y[int(row[j]), i, j] = 1.0
 
-        
-        if self.transforms is not None:
-            x = self.transforms(x)
        
         for i in range(0, 3):
             x[i] -= x[i].mean()
@@ -201,3 +206,96 @@ class SittingDataset(Dataset):
     def get_curr_mask(self):
         return self.curr_mask
     
+class Sur_and_Real(Dataset):
+    def __init__(self, dirry, num_classes, transforms=None, identifier=None, lengt=None):
+        self.pics = []
+
+        subdirs = [i[0] for i in os.walk(dirry[0])]
+
+        for i in subdirs:
+            for j in [k for k in os.listdir(i) if k.endswith('jpg')]:
+                self.pics.append(i + '/' + j)
+                if (len(self.pics) > lengt and lengt is not None):
+                    break
+
+        for j in [k for k in os.listdir(_dirry[1]) if k.endswith('jpg')]:
+            self.pics.append(dirry + '/' + j)
+
+        self.classes = num_classes
+        self.transforms = transforms
+        self.identifier = identifier 
+        self.curr_pic = []
+        self.curr_mask = []
+
+    def __getitem__(self, i):
+               
+        # get image and add padding to shape (x_height // 32 == 0, x_width // 32 == 0)
+        x, pad = load_image(self.pics[i], pad=True)
+
+        # save current batch of pictures for further demonstration
+        if len(self.curr_pic) >= 4:
+            self.curr_pic = []
+            self.curr_mask = []
+           
+        self.curr_pic.append(self.pics[i])
+        
+        y = np.zeros((self.classes, x.shape[0], x.shape[1]))
+
+        if 'sur' in self.pics[i]: 
+            tmp = self.pics[i].split('frame')
+            mask = sio.loadmat(tmp[0] + '_segm.mat')['segm_' + str(int(tmp[1][0:-4]) + 1)] 
+            
+            y = np.zeros((self.classes, x.shape[0], x.shape[1]))
+            
+            if self.identifier == 'restructed':
+                mask[(mask == 2) + (mask == 3)] = 1
+                mask[(mask == 4) + (mask == 7) +
+                    (mask == 10) + (mask == 13) +
+                    (mask == 14) + (mask == 15)] = 2
+                mask[(mask == 5) + (mask == 6)] = 3
+                mask[(mask == 8) + (mask == 9) +
+                    (mask == 11) + (mask == 12)] = 4
+                mask[mask == 16] = 5
+                mask[(mask == 19) + (mask == 20)] = 6
+                mask[(mask == 17) + (mask == 18)] = 7
+                mask[(mask == 21) + (mask == 22) +
+                    (mask == 23) + (mask == 24)] = 8            
+        elif 'sit' in self.pics[i]:
+            tmp = self.pics[i].split('img')
+            mask = sio.loadmat(tmp[0] + 'masks' + tmp[-1][:-4] + '.mat')['M']   
+
+            if self.identifier == 'restructed':
+            
+                mask[(mask == 5) + (mask == 8)] = 8
+                mask[(mask == 4) + (mask == 7)] = 7
+                mask[(mask == 3) + (mask == 6)] = 6
+                mask[(mask == 1)] = 5
+                mask[(mask == 2)] = 2
+                mask[(mask == 10) + (mask == 13)] = 1
+                mask[(mask == 9) + (mask == 12)] = 3  
+                mask[(mask == 11) + (mask == 14)] = 4
+                
+        
+        self.curr_mask.append(mask)
+        
+         # transorm ToTensor + add normalization to zero mean and unit std
+        if self.transforms is not None:
+            for t in self.transforms:
+                x, mask = t(x, mask)
+
+        #binarizing mask
+        for i in range(len(mask)):
+            row = mask[i]
+            for j in range(len(row)):
+                y[row[j], i, j] = 1.0
+
+       
+        for i in range(0, 3):
+            x[i] -= x[i].mean()
+            
+            x[i] /= x[i].std()
+            
+        
+        y = torch.FloatTensor(y)
+       
+        return x, y
