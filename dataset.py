@@ -3,6 +3,7 @@ import os
 import scipy.io as sio
 import torch
 from torch.utils.data.dataset import Dataset
+from torchvision.transforms import ToTensor
 import cv2
 import PIL
 
@@ -98,9 +99,9 @@ class SURREALDataset(Dataset):
         
         # transorm ToTensor + add normalization to zero mean and unit std
         if self.transforms is not None:
-            for t in self.transforms:
-                x, mask = t(x, mask)
+            x, mask = self.transforms(x, mask)
         
+        x = torch.from_numpy(np.moveaxis(x, -1, 0)).float()
         #binarizing mask
         for i in range(len(mask)):
             row = mask[i]
@@ -174,11 +175,10 @@ class SittingDataset(Dataset):
 
          # transorm ToTensor + add normalization to zero mean and unit std
         if self.transforms is not None:
-            for t in self.transforms:
-                x, mask = t(x, mask)
+            x, mask = self.transforms(x, mask)
 
         self.curr_mask.append(mask)   
-         
+        x = torch.from_numpy(np.moveaxis(x, -1, 0)).float()
         #binarizing mask
         for i in range(len(mask)):
             row = mask[i]
@@ -207,9 +207,14 @@ class SittingDataset(Dataset):
         return self.curr_mask
     
 class Sur_and_Real(Dataset):
-    def __init__(self, dirry, num_classes, transforms=None, identifier=None, lengt=None):
+    def __init__(self, dirry, num_classes, transforms=None, identifier=None, lengt=None, ind_1=None, ind_2=None):
         self.pics = []
 
+        subdirs = [k for k in os.listdir(dirry[1]) if k.endswith('jpg')]
+        
+        for j in range(ind_1, ind_2):
+            self.pics.append(dirry[1] + '/' + subdirs[j])
+        
         subdirs = [i[0] for i in os.walk(dirry[0])]
 
         for i in subdirs:
@@ -217,9 +222,6 @@ class Sur_and_Real(Dataset):
                 self.pics.append(i + '/' + j)
                 if (len(self.pics) > lengt and lengt is not None):
                     break
-
-        for j in [k for k in os.listdir(_dirry[1]) if k.endswith('jpg')]:
-            self.pics.append(dirry + '/' + j)
 
         self.classes = num_classes
         self.transforms = transforms
@@ -276,18 +278,17 @@ class Sur_and_Real(Dataset):
                 mask[(mask == 11) + (mask == 14)] = 4
                 
         
-        self.curr_mask.append(mask)
-        
-         # transorm ToTensor + add normalization to zero mean and unit std
         if self.transforms is not None:
-            for t in self.transforms:
-                x, mask = t(x, mask)
+            x, mask = self.transforms(x, mask)
+
+        self.curr_mask.append(mask)   
+        x = torch.from_numpy(np.moveaxis(x, -1, 0)).float()
 
         #binarizing mask
         for i in range(len(mask)):
             row = mask[i]
             for j in range(len(row)):
-                y[row[j], i, j] = 1.0
+                y[int(row[j]), i, j] = 1.0
 
        
         for i in range(0, 3):
@@ -299,3 +300,14 @@ class Sur_and_Real(Dataset):
         y = torch.FloatTensor(y)
        
         return x, y
+    
+    def __len__(self):
+        return len(self.pics)
+
+    def get_classes(self):
+        return self.classes
+    
+    def get_curr_pic(self):
+        return self.curr_pic
+    def get_curr_mask(self):
+        return self.curr_mask

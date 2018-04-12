@@ -7,6 +7,15 @@ import math
     Implementation from here:
         https://github.com/asanakoy/kaggle_carvana_segmentation/blob/master/albu/src/transforms.py
 '''
+class DualCompose:
+    def __init__(self, transforms):
+        self.transforms = transforms
+
+    def __call__(self, x, mask=None):
+        for t in self.transforms:
+            x, mask = t(x, mask)
+        return x, mask
+
 
 class VerticalFlip:
     def __init__(self, prob=0.5):
