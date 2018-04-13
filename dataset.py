@@ -4,49 +4,13 @@ import scipy.io as sio
 import torch
 from torch.utils.data.dataset import Dataset
 from torchvision.transforms import ToTensor
+from utils import load_image
 import cv2
 import PIL
 
-#USEFULL FUNCTION
-def load_image(path, pad=True):
-    """
-    Load image from a given path and pad it on the sides, so that eash side is divisible by 32 (network requirement)
-    if pad = True:
-        returns image as numpy.array, tuple with padding in pixels as(x_min_pad, y_min_pad, x_max_pad, y_max_pad)
-    else:
-        returns image as numpy.array
-    """
-    img = cv2.imread(str(path))
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    
-    if not pad:
-        return img
-    
-    height, width, _ = img.shape
-    
-    if height % 32 == 0:
-        y_min_pad = 0
-        y_max_pad = 0
-    else:
-        y_pad = 32 - height % 32
-        y_min_pad = int(y_pad / 2)
-        y_max_pad = y_pad - y_min_pad
-        
-    if width % 32 == 0:
-        x_min_pad = 0
-        x_max_pad = 0
-    else:
-        x_pad = 32 - width % 32
-        x_min_pad = int(x_pad / 2)
-        x_max_pad = x_pad - x_min_pad
-    
-    img = cv2.copyMakeBorder(img, y_min_pad, y_max_pad, x_min_pad, x_max_pad, cv2.BORDER_REFLECT_101)
-
-    return img, (x_min_pad, y_min_pad, x_max_pad, y_max_pad)
-
 #SURREAL DATASET LOADER
 class SURREALDataset(Dataset):
-    def __init__(self, dirry, num_classes, transforms=None, identifier=None, lengt=None):
+    def __init__(self, dirry, num_classes, transforms=None, identifier=None, lengt=None, weights=None, weight_type=None):
         self.pics = []
         
         subdirs = [i[0] for i in os.walk(dirry)]
@@ -62,8 +26,8 @@ class SURREALDataset(Dataset):
         self.identifier = identifier 
         self.curr_pic = []
         self.curr_mask = []
+
     def __getitem__(self, i):
-           
         # get image and add padding to shape (x_height // 32 == 0, x_width // 32 == 0)
         x, pad = load_image(self.pics[i], pad=True)
         # save current batch of pictures for further demonstration
@@ -100,14 +64,14 @@ class SURREALDataset(Dataset):
         # transorm ToTensor + add normalization to zero mean and unit std
         if self.transforms is not None:
             x, mask = self.transforms(x, mask)
-        
-        x = torch.from_numpy(np.moveaxis(x, -1, 0)).float()
+            
+        #x = torch.from_numpy(np.moveaxis(x, -1, 0)).float()
         #binarizing mask
         for i in range(len(mask)):
             row = mask[i]
             for j in range(len(row)):
                 y[row[j], i, j] = 1.0
-        
+
         for i in range(0, 3):
             x[i] -= x[i].mean()
             
@@ -129,6 +93,7 @@ class SURREALDataset(Dataset):
     
     def get_curr_pic(self):
         return self.curr_pic
+    
     def get_curr_mask(self):
         return self.curr_mask
     
@@ -203,6 +168,7 @@ class SittingDataset(Dataset):
     
     def get_curr_pic(self):
         return self.curr_pic
+    
     def get_curr_mask(self):
         return self.curr_mask
     
@@ -309,5 +275,6 @@ class Sur_and_Real(Dataset):
     
     def get_curr_pic(self):
         return self.curr_pic
+    
     def get_curr_mask(self):
         return self.curr_mask
