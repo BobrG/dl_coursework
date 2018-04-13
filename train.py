@@ -3,73 +3,32 @@ import torch
 from torch.autograd import Variable
 from base_train import BaseTrainer
 
-#WEIGHTENING FUNCTION
-def weighting(image, batch_size, num_classes=25):
-    """
-    The custom class weighing function.
-    INPUTS:
-    - image_files(list): a list of image_filenames which element can be read immediately;
-    OUTPUTS:
-    - class_weights(list): a list of class weights where each index represents each class label
-    and the element is the class weight for that label;
-    """
-    #initialize dictionary with all 0
-    
-    label_to_frequency = {}
-    
-    for i in range(num_classes):
-        label_to_frequency[i] = 0
-    
-    #count frequency of each class for images
-    
-    for n in range(batch_size):
-#         tmp = image_files[n].split('frame')
-#         image = sio.loadmat(tmp[0] + '_segm.mat')['segm_' + str(int(tmp[1][0:-4]) + 1)] 
-    
-        for i in range(num_classes):
-            
-            class_mask = np.equal(image[n, i], 1)
-            class_mask = class_mask.astype(np.float32)
-            class_frequency = (class_mask.sum())
-
-            if class_frequency != 0.0:
-                label_to_frequency[i]+=(class_frequency)
-
-    
-    #applying weighting function and appending the class weights to class_weights
-    
-    class_weights = np.zeros((num_classes))
-    
-    total_frequency = sum(label_to_frequency.values())
-    i = 0
-    for class_, freq_ in label_to_frequency.items():
-        class_weight = 1 / np.log(1.02 + (freq_ / total_frequency))
-        class_weights[i] = class_weight
-        i += 1
-        
-    # as first goes background
-    class_weights[0] = 0.0 
-    
-    return class_weights
-
 class Trainer(BaseTrainer):
     """ Trainer class
 
-    Note:
-        Inherited from BaseTrainer.
+    Note: Inherited from BaseTrainer.
+        
+    Important - metrics should be representative, so that they should be normalized in [0, 1], to monitor training dynamic.
+                same requirement to val_loss;
+                
     """
-    def __init__(self, model, loss, data_loader, optimizer, epochs,
+    def __init__(self, model, loss, metrics, data_loader, optimizer, epochs,
                  save_dir, save_freq, gpu, verbosity, identifier='',
-                 resume='', valid_data_loader=None):
-        super(Trainer, self).__init__(model, loss, optimizer, epochs,
+                 resume='', valid_data_loader=None, val_loss=None, scheduler=None):
+        super(Trainer, self).__init__(model, loss, metrics, optimizer, epochs,
                                       save_dir, save_freq, verbosity, identifier, resume)
         self.batch_size = data_loader.batch_size
         self.data_loader = data_loader
         self.valid_data_loader = valid_data_loader
+        self.scheduler = scheduler
+        if val_loss is not None:
+            self.val_loss = val_loss
+        else:
+            self.val_loss = loss
         self.valid = True if self.valid_data_loader else False
         self.gpu = gpu
 
-    def _train_epoch(self, epoch):
+    def train_epoch(self, epoch):
         """ 
         Train an epoch
         
@@ -79,57 +38,77 @@ class Trainer(BaseTrainer):
             self.model.cuda()
 
         total_loss = 0
+        total_metrics = np.zeros(len(self.metrics))
+        metrics = np.zeros(len(self.metrics))
         for batch_idx, (data, target) in enumerate(self.data_loader):
             
-            weights = weighting(target.numpy(), target.size(0), target.size(1))
-            
-           
             if self.gpu:
                 data, target = data.cuda(async=True), target.cuda(async=True)
             
             data, target = torch.unsqueeze(Variable(data), dim=0)[0], Variable(target)
-
            
             self.optimizer.zero_grad()
             output = self.model(data)
-            loss = self.loss.evaluate(output, target, weights)
+           
+            for i, metric in enumerate(self.metrics):
+                metrics[i] = metric(output, target)
+                total_metrics[i] += metrics[i]
+
+            loss = self.loss(output, target)
             loss.backward()
             self.optimizer.step()
 
             total_loss += loss.data[0]
+
             step = int(np.sqrt(self.batch_size))
             if self.verbosity >= 2 and batch_idx % step == 0:
-                print('Train Epoch: {} [{}/{} ({:.0f}%)] Loss: {:.6f}'.format(
+                print('Train Epoch: {} [{}/{} ({:.0f}%)] Loss {:.9f}'.format(
                     epoch, batch_idx * len(data), len(self.data_loader) * len(data),
-                    100.0 * batch_idx / len(self.data_loader), loss.data[0]))
-
+                    100.0 * batch_idx / len(self.data_loader),
+                    loss.data[0] ))
+                for i in range(len(metrics)):
+                    print('Metric ' + self.metrics[i].__name__(), ': {:.9f}'.format(metrics[i]))
+            
+        avg_metrics = (total_metrics / len(self.data_loader)).tolist()
         avg_loss = total_loss / len(self.data_loader)
-        log = {'loss': avg_loss}
+        
+        log = {'loss': avg_loss, 'metrics': avg_metrics}
 
         if self.valid:
-            val_log = self._valid_epoch()
+            val_log = self.valid_epoch()
             log = {**log, **val_log}
 
         return log
 
-    def _valid_epoch(self):
+    def valid_epoch(self):
         """
         Validate after training an epoch
         
         """
         self.model.eval()
         total_val_loss = 0
+        total_val_metrics = np.zeros(len(self.metrics))
+        metrics = np.zeros(len(self.metrics))
         for batch_idx, (data, target) in enumerate(self.valid_data_loader):
-            weights = weighting(target.numpy(), target.size(0), target.size(1))
-            
+         
             if self.gpu:
                 data, target = data.cuda(), target.cuda()
             data, target = torch.unsqueeze(Variable(data), dim=0)[0], Variable(target)
            
             
             output = self.model(data)
-            loss = self.loss.evaluate(output, target)
+            for i, metric in enumerate(self.metrics):
+                metrics[i] = metric(output, target)
+                total_val_metrics[i] += metrics[i]
+                
+            loss = self.val_loss(output, target)
+            
             total_val_loss += loss.data[0]
-
+        
+        avg_metrics = (total_val_metrics / len(self.valid_data_loader)).tolist()
         avg_val_loss = total_val_loss / len(self.valid_data_loader)
-        return {'val_loss': avg_val_loss}
+        
+        if self.scheduler is not None:
+            self.scheduler.step(avg_val_loss)
+            
+        return {'val_loss': avg_val_loss, 'val_metrics': avg_metrics}
