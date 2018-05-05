@@ -35,7 +35,7 @@ def weighting(image, batch_size, num_classes, weight_type='log'):
         for i in range(num_classes):
             class_mask = np.equal(image[n, i], 1)
             class_mask = class_mask.astype(np.float32)
-            class_frequency = (class_mask.sum())
+            class_frequency = class_mask.sum()
 
             if class_frequency != 0.0:
                 label_to_frequency[i].append(class_frequency)
@@ -71,13 +71,11 @@ def weighting(image, batch_size, num_classes, weight_type='log'):
     
     # as first goes background
     class_weights[0] = 0.0 
-    # normalize weights:
-    class_weights /= class_weights.sum()
     
     return class_weights
 
 #USEFULL FUNCTION
-def load_image(path, pad=True):
+def load_image(path, pad=True, fixed_size=None):
     """
     Load image from a given path and pad it on the sides, so that eash side is divisible by 32 (network requirement)
     if pad = True:
@@ -92,6 +90,14 @@ def load_image(path, pad=True):
         return img
     
     height, width, _ = img.shape
+
+    if fixed_size is not None:
+        y_min_pad = int(fixed_size[0] / 2)
+        y_max_pad = y_pad - y_min_pad
+        x_min_pad = int(fixed_size[1] / 2)
+        x_max_pad = x_pad - x_min_pad
+        img = cv2.copyMakeBorder(img, y_min_pad, y_max_pad, x_min_pad, x_max_pad, cv2.BORDER_REFLECT_101)
+        return img, (x_min_pad, y_min_pad, x_max_pad, y_max_pad)
     
     if height % 32 == 0:
         y_min_pad = 0
