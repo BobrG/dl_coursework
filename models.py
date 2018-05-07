@@ -26,8 +26,8 @@ class DecoderBlock(nn.Module):
         super().__init__()
 
         self.block = nn.Sequential(
-            ConvRelu(in_channels, middle_channels, batch_norm)
-            nn.ConvTranspose2d(middle_channels, out_channels, kernel_size=3, stride=2, padding=1, output_padding=1),
+            ConvRelu(in_channels, middle_channels, batch_norm),
+            nn.ConvTranspose2d(middle_channels, out_channels, kernel_size=3,stride=2, padding=1, output_padding=1),
             nn.ReLU(inplace=True)
         )
 
@@ -40,7 +40,7 @@ class DecoderBlockDropout(nn.Module):
 
         self.block = nn.Sequential(
             ConvRelu(in_channels, middle_channels),
-            nn.Dropout2d(p=0.2)
+            nn.Dropout2d(p=0.2),
             nn.ConvTranspose2d(middle_channels, out_channels, kernel_size=3, stride=2, padding=1, output_padding=1),
             nn.ReLU(inplace=True)
         )
@@ -79,9 +79,9 @@ class DecoderBlockV2(nn.Module):
     VggUnet Architectures from https://github.com/ternaus/TernausNet/blob/master/unet_models.py
 '''
 
-class Unet11(nn.Module):
+class UNet11(nn.Module):
     def __init__(self, num_classes, num_filters=32, pretrained=False, batch_norm=False):
-         '''
+        '''
         :param num_classes:
         :param num_filters:
         :param pretrained:
@@ -244,11 +244,11 @@ class UNet16(nn.Module):
 
         x_out = F.sigmoid(self.final(dec1))
 
-    return x_out
+        return x_out
 
-class Unet11_dropout(nn.Module):
+class UNet11_dropout(nn.Module):
     def __init__(self, num_classes, num_filters=32, pretrained=False):
-         '''
+        '''
         :param num_classes:
         :param num_filters:
         :param pretrained:
@@ -328,6 +328,35 @@ class Unet11_dropout(nn.Module):
 '''
     Vanilla Unet from https://github.com/lopuhin/mapillary-vistas-2017/blob/master/unet_models.py
 '''
+def concat(xs):
+    return torch.cat(xs, 1)
+
+
+class Conv3BN(nn.Module):
+    def __init__(self, in_: int, out: int, bn=False):
+        super().__init__()
+        self.conv = conv3x3(in_, out)
+        self.bn = nn.BatchNorm2d(out) if bn else None
+        self.activation = nn.ReLU(inplace=True)
+
+    def forward(self, x):
+        x = self.conv(x)
+        if self.bn is not None:
+            x = self.bn(x)
+        x = self.activation(x)
+        return x
+
+
+class UNetModule(nn.Module):
+    def __init__(self, in_: int, out: int):
+        super().__init__()
+        self.l1 = Conv3BN(in_, out)
+        self.l2 = Conv3BN(out, out)
+
+    def forward(self, x):
+        x = self.l1(x)
+        x = self.l2(x)
+        return x
 
 class UNet(nn.Module):
     output_downscaled = 1
@@ -393,3 +422,4 @@ def get_model(model_name, num_classes, pretrained=False, path='', **kwargs):
         model.load_state_dict(state['model'])
     
     return model
+    

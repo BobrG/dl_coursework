@@ -1,4 +1,5 @@
 import os
+import cv2
 import torch
 import numpy as np
 import scipy.io as sio
@@ -29,7 +30,7 @@ class SURREALDataset(Dataset):
     def __getitem__(self, i):
         # get image and add padding to shape (x_height // 32 == 0, x_width // 32 == 0)
         if self.fixed_size is not None:
-            x, pad = load_image(self.pics[i], pad=True, fixed_size=self.fixed_size=)
+            x, pad = load_image(self.pics[i], pad=True, fixed_size=self.fixed_size)
         else:    
             x, pad = load_image(self.pics[i], pad=True)
         # save current batch of pictures for further demonstration
@@ -80,7 +81,7 @@ class SURREALDataset(Dataset):
             x[i] /= x[i].std()
             
         
-        y = torch.FloatTensor(y[1:])#drop background
+        y = torch.FloatTensor(y)#drop background
        
         return x, y
     
@@ -118,7 +119,7 @@ class SittingDataset(Dataset):
     def __getitem__(self, i):
         # get image 
         if self.fixed_size is not None:
-            x, pad = load_image(self.pics[i], pad=True, fixed_size=self.fixed_size=)
+            x, pad = load_image(self.pics[i], pad=True, fixed_size=self.fixed_size)
         else:    
             x, pad = load_image(self.pics[i], pad=True)
        
@@ -164,7 +165,7 @@ class SittingDataset(Dataset):
             
             x[i] /= x[i].std()
     
-        y = torch.FloatTensor(y[1:])#drop background
+        y = torch.FloatTensor(y)#drop background
     
         return x, y
     
@@ -186,11 +187,11 @@ class PascalDataset(Dataset):
         self.pics = []
         self.masks = []
         subdirs = [k for k in os.listdir(dirry) if k.endswith('mat')]
-        self.path_2_pic = '~/home/novikov/Dropbox/skoltech/students/Gleb/VOCdevkit/VOC2010/JPEGImages/'
+        self.path_2_pic = '/home/novikov/home/novikov/Dropbox/skoltech/students/Gleb/VOCdevkit/VOC2010/JPEGImages'
         self.path_2_mask = dirry
         for j in subdirs:
-            self.pics.append(self.path_2_pic + '/' + j[:-4] + 'jpg')
-            self.masks.append(self.path_2_pic + '/' + j)
+            self.pics.append(self.path_2_pic + '/' + j[:-4] + '.jpg')
+            self.masks.append(self.path_2_mask + '/' + j)
         self.classes = num_classes
         self.transforms = transforms
         self.identifier = identifier 
@@ -211,23 +212,24 @@ class PascalDataset(Dataset):
 
     def  __getitem__(self, i):
         if self.fixed_size is not None:
-            x, pad = load_image(self.pics[i], pad=True, fixed_size=self.fixed_size=)
+            x, pad = load_image(self.pics[i], pad=True, fixed_size=self.fixed_size)
         else:    
             x, pad = load_image(self.pics[i], pad=True)
-       
+            
         if len(self.curr_pic) >= 4:
             self.curr_pic = []
             self.curr_mask = []
-            
+        
         self.curr_pic.append(self.pics[i])
         
         # get segmentation map
         y = np.zeros((self.classes, x.shape[0], x.shape[1]))
-        for i in tmp['anno'][0][0][1][0]:
+        tmp_mask=sio.loadmat(self.masks[i])['anno'][0][0][1][0]
+        for i in tmp_mask:
             if (i[0][0] == 'person'):
                 #background
                 #y[0] = cv2.copyMakeBorder(-1*(i[2][0] - np.ones(i[2][0].shape)), pad, cv2.BORDER_REFLECT_101) 
-                for j, mask in enumerate(i[3][0]):
+                for j, mask in enumerate(i[3][0][0]):
                     for c, class_ in enumerate(self.classes_list):
                         if mask[0][0] in class_:
                             y[c] = cv2.copyMakeBorder(mask[1], pad, cv2.BORDER_REFLECT_101)
@@ -238,6 +240,19 @@ class PascalDataset(Dataset):
         y = torch.FloatTensor(y)
 
         return x, y
+    
+    def __len__(self):
+        return len(self.pics)
+
+    def get_classes(self):
+        return self.classes
+    
+    def get_curr_pic(self):
+        return self.curr_pic
+    
+    def get_curr_mask(self):
+        return self.curr_mask
+
 
 #Combination Dataset
 class CombineDataset(Dataset):
