@@ -1,12 +1,11 @@
 import torch
+import cv2
 import numpy as np
 import os
 import scipy.io as sio
 import matplotlib.pyplot as plt
 from torch.autograd import Variable
-
-# rewrite in pytorch!
-
+from torch.utils.data.sampler import SubsetRandomSampler
 
 # rewrite in pytorch!
 def weighting(image, batch_size, num_classes, weight_type='log'):
@@ -90,12 +89,15 @@ def load_image(path, pad=True, fixed_size=None):
         return img
     
     height, width, _ = img.shape
-
+    
     if fixed_size is not None:
-        y_min_pad = int(fixed_size[0] / 2)
-        y_max_pad = y_pad - y_min_pad
-        x_min_pad = int(fixed_size[1] / 2)
+        
+        x_pad = fixed_size[0] - width
+        x_min_pad = int(x_pad / 2)
         x_max_pad = x_pad - x_min_pad
+        y_pad = fixed_size[1] - height
+        y_min_pad = int(y_pad / 2)
+        y_max_pad = y_pad - y_min_pad
         img = cv2.copyMakeBorder(img, y_min_pad, y_max_pad, x_min_pad, x_max_pad, cv2.BORDER_REFLECT_101)
         return img, (x_min_pad, y_min_pad, x_max_pad, y_max_pad)
     
@@ -118,6 +120,24 @@ def load_image(path, pad=True, fixed_size=None):
     img = cv2.copyMakeBorder(img, y_min_pad, y_max_pad, x_min_pad, x_max_pad, cv2.BORDER_REFLECT_101)
 
     return img, (x_min_pad, y_min_pad, x_max_pad, y_max_pad)
+
+def dataset_split(dataset, test_size, val_size=None, shuffle=True, random_seed=42):
+    num_dset = len(dataset)
+    indices = list(range(num_dset))
+    split_test = int(np.floor(test_size * num_dset))
+    if shuffle:
+        np.random.seed(random_seed)
+        np.random.shuffle(indices)
+    train_idx, test_idx = indices[split_test:], indices[:split_test]
+    test_sampler = SubsetRandomSampler(test_idx)
+    if val_size is not None:
+        split_val = int(np.floor(val_size * len(train_idx)))
+        train_idx, val_idx = train_idx[split_val:], train_idx[:split_val]
+        train_sampler = SubsetRandomSampler(train_idx)
+        val_sampler = SubsetRandomSampler(val_idx)
+        return train_sampler, test_sampler, val_sampler
+    
+    return train_sampler, test_sampler
 
 
 def show_pics(imgs, col, row):
@@ -155,3 +175,4 @@ def show_all_classes(dataset, output):
     plt.subplot(2, 2, 2)
     plt.imshow(plt.imread(dataset.dataset.get_curr_pic()[0]))
     plt.axis('off')
+    
