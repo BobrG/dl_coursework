@@ -221,24 +221,24 @@ class PascalDataset(Dataset):
             self.curr_mask = []
         
         self.curr_pic.append(self.pics[i])
-        
         # get segmentation map
         y = np.zeros((self.classes, x.shape[0], x.shape[1]))
         tmp_mask=sio.loadmat(self.masks[i])['anno'][0][0][1][0]
         for i in tmp_mask:
             if (i[0][0] == 'person'):
                 #background
-                #y[0] = cv2.copyMakeBorder(-1*(i[2][0] - np.ones(i[2][0].shape)), pad, cv2.BORDER_REFLECT_101) 
+                #y[0] = cv2.copyMakeBorder(-1*(i[2][0] - np.ones(i[2][0].shape)), pad, cv2.BORDER_REFLECT_101)
                 for j, mask in enumerate(i[3][0][0]):
                     for c, class_ in enumerate(self.classes_list):
                         if mask[0][0] in class_:
                             y[c] = cv2.copyMakeBorder(mask[1], pad, cv2.BORDER_REFLECT_101)
                 break
-
+        
         if self.transforms is not None:
             x, y = self.transforms(x, y)
+        
         y = torch.FloatTensor(y)
-
+        print(x.shape, y.shape)
         return x, y
     
     def __len__(self):
@@ -258,122 +258,17 @@ class PascalDataset(Dataset):
 class CombineDataset(Dataset):
     def __init__(self, datasets):
         self.datasets = datasets
-        self.lengts = [len(i) for i in datasets]
+        self.lengths = [len(i) for i in datasets]
         self.offsets = np.cumsum(self.lengths)
         self.length = np.sum(self.lengths)
     def __getitem__(self, index):
         for i, offset in enumerate(self.offsets):
-            if (index < offset and i > 0):
-                index -= self.offsets[i-1]
-                return self.datasets[i][index]
+            if (index <= offset):
+                if i > 0:
+                    index -= self.offsets[i-1]
+                    return self.datasets[i][index]
+                else:
+                    return self.datasets[0][index]
     def __len__(self):
         return self.length
-
-#TEMPORARY Sur + Real dataset
-class Sur_and_Real(Dataset):
-    def __init__(self, dirry, num_classes, transforms=None, identifier=None, lengt=None, ind_1=None, ind_2=None):
-        self.pics = []
-
-        subdirs = [k for k in os.listdir(dirry[1]) if k.endswith('jpg')]
         
-        for j in range(ind_1, ind_2):
-            self.pics.append(dirry[1] + '/' + subdirs[j])
-        
-        subdirs = [i[0] for i in os.walk(dirry[0])]
-
-        for i in subdirs:
-            for j in [k for k in os.listdir(i) if k.endswith('jpg')]:
-                
-                if (len(self.pics) > lengt and lengt is not None):
-                    break
-                else:
-                    self.pics.append(i + '/' + j)
-
-        self.classes = num_classes
-        self.transforms = transforms
-        self.identifier = identifier 
-        self.curr_pic = []
-        self.curr_mask = []
-
-    def __getitem__(self, i):
-               
-        # get image and add padding to shape (x_height // 32 == 0, x_width // 32 == 0)
-        x, pad = load_image(self.pics[i], pad=True)
-        #x = cv2.copyMakeBorder(plt.imread(self.pics[i]), 10, y_max_pad, x_min_pad, x_max_pad, cv2.BORDER_REFLECT_101)
-
-        # save current batch of pictures for further demonstration
-        if len(self.curr_pic) >= 4:
-            self.curr_pic = []
-            self.curr_mask = []
-           
-        self.curr_pic.append(self.pics[i])
-        
-        y = np.zeros((self.classes, x.shape[0], x.shape[1]))
-
-        if 'sur' in self.pics[i]: 
-            tmp = self.pics[i].split('frame')
-            mask = sio.loadmat(tmp[0] + '_segm.mat')['segm_' + str(int(tmp[1][0:-4]) + 1)] 
-            
-            if self.identifier == 'restructed':
-                mask[(mask == 2) + (mask == 3)] = 1
-                mask[(mask == 4) + (mask == 7) +
-                    (mask == 10) + (mask == 13) +
-                    (mask == 14) + (mask == 15)] = 2
-                mask[(mask == 5) + (mask == 6)] = 3
-                mask[(mask == 8) + (mask == 9) +
-                    (mask == 11) + (mask == 12)] = 4
-                mask[mask == 16] = 5
-                mask[(mask == 19) + (mask == 20)] = 6
-                mask[(mask == 17) + (mask == 18)] = 7
-                mask[(mask == 21) + (mask == 22) +
-                    (mask == 23) + (mask == 24)] = 8            
-        elif 'sit' in self.pics[i]:
-            tmp = self.pics[i].split('img')
-            mask = sio.loadmat(tmp[0] + 'masks' + tmp[-1][:-4] + '.mat')['M']   
-
-            if self.identifier == 'restructed':
-            
-                mask[(mask == 5) + (mask == 8)] = 8
-                mask[(mask == 4) + (mask == 7)] = 7
-                mask[(mask == 3) + (mask == 6)] = 6
-                mask[(mask == 1)] = 5
-                mask[(mask == 2)] = 2
-                mask[(mask == 10) + (mask == 13)] = 1
-                mask[(mask == 9) + (mask == 12)] = 3  
-                mask[(mask == 11) + (mask == 14)] = 4
-                
-        
-        if self.transforms is not None:
-            x, mask = self.transforms(x, mask)
-
-        self.curr_mask.append(mask)   
-        #x = torch.from_numpy(np.moveaxis(x, -1, 0)).float()
-
-        #binarizing mask
-        for i in range(len(mask)):
-            row = mask[i]
-            for j in range(len(row)):
-                y[int(row[j]), i, j] = 1.0
-
-       
-        for i in range(0, 3):
-            x[i] -= x[i].mean()
-            
-            x[i] /= x[i].std()
-            
-        
-        y = torch.FloatTensor(y)#drop background
-        
-        return x, y
-    
-    def __len__(self):
-        return len(self.pics)
-
-    def get_classes(self):
-        return self.classes
-    
-    def get_curr_pic(self):
-        return self.curr_pic
-    
-    def get_curr_mask(self):
-        return self.curr_mask
